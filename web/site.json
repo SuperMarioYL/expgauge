@@ -128,6 +128,14 @@
         "body": {
           "zh": "传统 LLM 可观测性工具（LangSmith、Helicone）追踪单次请求的延迟和成本。但无人值守的暴露是时间性的——自上次人工审查以来过了多久，发生了多少状态变更。expgauge 引入了一个新的流原语：运行级暴露徽章。",
           "en": "Traditional LLM observability tools (LangSmith, Helicone) track per-request latency and cost. But unsupervised exposure is temporal — how long since a human looked, how many state mutations occurred. expgauge introduces a new flow primitive: the run-level exposure badge."
+        },
+        "image": {
+          "light": "/assets/exposure-light.svg",
+          "dark": "/assets/exposure-dark.svg",
+          "alt": {
+            "zh": "暴露徽章",
+            "en": "Exposure badge"
+          }
         }
       },
       {
@@ -138,6 +146,14 @@
         "body": {
           "zh": "社区建了 I Have Been Clawed——一个 coding agent 事故索引。但它是事后编目，不是事前预防。expgauge 在事故发生前就强制你回头看一眼。",
           "en": "The community built I Have Been Clawed — an index of coding agent incidents. But it catalogs after damage, not before. expgauge forces you to look back before things go wrong."
+        },
+        "image": {
+          "light": "/assets/incident-light.svg",
+          "dark": "/assets/incident-dark.svg",
+          "alt": {
+            "zh": "从事后到事前",
+            "en": "From post-mortem to prevention"
+          }
         }
       }
     ],
