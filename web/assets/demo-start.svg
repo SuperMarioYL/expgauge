@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="120" viewBox="0 0 400 120">
+  <rect width="400" height="120" rx="8" fill="#0d1220"/>
+  <text x="20" y="30" font-family="monospace" font-size="14" fill="#758bff">expgauge v0.1.0  watching PID 12345</text>
+  <text x="20" y="55" font-family="monospace" font-size="12" fill="#9ba7c9">wall-clock  0h 12m 34s  ██████░</text>
+  <text x="20" y="75" font-family="monospace" font-size="12" fill="#9ba7c9">mutations   8             ███░</text>
+  <text x="20" y="95" font-family="monospace" font-size="12" fill="#71daff">status      OK</text>
+</svg>
