@@ -1,0 +1,38 @@
+{
+  "mode": "legacy",
+  "id": "758bff-ba82ff-71daff-f5cf68f6f141",
+  "identity": "https://github.com/supermarioyl/expgauge",
+  "primary": "#758bff",
+  "secondary": "#ba82ff",
+  "highlight": "#71daff",
+  "dark": {
+    "bg": "#060913",
+    "panel": "#0d1220",
+    "code": "#0c101f",
+    "ink": "#e3f8ff",
+    "muted": "#9ba7c9",
+    "line": "#1e2647",
+    "primary": "#758bff",
+    "secondary": "#ba82ff",
+    "highlight": "#71daff",
+    "accent": "#758bff",
+    "buttonStart": "#5e6fcd",
+    "buttonEnd": "#8d62c1",
+    "buttonText": "#ffffff"
+  },
+  "light": {
+    "bg": "#fafbff",
+    "panel": "#f8f9ff",
+    "code": "#f5f7ff",
+    "ink": "#171d33",
+    "muted": "#5b698d",
+    "line": "#d5dcff",
+    "primary": "#5a6bc5",
+    "secondary": "#875eb9",
+    "highlight": "#3f798e",
+    "accent": "#5a6bc5",
+    "buttonStart": "#5e6fcd",
+    "buttonEnd": "#8d62c1",
+    "buttonText": "#ffffff"
+  }
+}

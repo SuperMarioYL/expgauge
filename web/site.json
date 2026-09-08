@@ -1,0 +1,162 @@
+{
+  "schema": 3,
+  "name": "expgauge",
+  "github": "https://github.com/SuperMarioYL/expgauge",
+  "lang": {
+    "primary": "zh",
+    "toggle": true
+  },
+  "hero": {
+    "headline": {
+      "en": "When was the last time a human checked on your agent?",
+      "zh": "你的 agent 已经无人看管多久了？"
+    },
+    "sub": {
+      "en": "expgauge tracks cumulative unsupervised exposure — wall-clock time, state-mutating tool calls, and token burn — and forces a human review checkpoint before things go sideways.",
+      "zh": "expgauge 追踪累计暴露量（运行时长、状态变更、token 消耗），在越过阈值时强制暂停，等待人工审查后才放行。"
+    },
+    "href": "#quickstart"
+  },
+  "advantages": [
+    {
+      "title": {
+        "en": "Run-level exposure tracking",
+        "zh": "运行级暴露追踪"
+      },
+      "body": {
+        "en": "Not per-action risk grading, not per-request metrics. expgauge accumulates wall-clock time since your last review, counts state-mutating filesystem events, and estimates token burn across the whole agent run.",
+        "zh": "不是单次操作的风险评级，不是单次请求的指标。expgauge 累计自上次审查以来的运行时长、统计状态变更的文件系统事件、估算整个 agent 运行期间的 token 消耗。"
+      }
+    },
+    {
+      "title": {
+        "en": "Threshold-forced review",
+        "zh": "阈值强制审查"
+      },
+      "body": {
+        "en": "When cumulative exposure crosses a configurable threshold (default: 2 hours / 50 mutations / 1M tokens), expgauge sends SIGTSTP to the agent process and blocks on a human review prompt. The agent cannot continue until you say yes.",
+        "zh": "当累计暴露量越过可配置阈值（默认：2 小时 / 50 次变更 / 100 万 token），expgauge 向 agent 进程发送 SIGTSTP 并阻塞在人工审查提示上。agent 在你确认前不会继续运行。"
+      }
+    },
+    {
+      "title": {
+        "en": "Built for local Chinese models",
+        "zh": "为本地国产模型而建"
+      },
+      "body": {
+        "en": "Qwen3.8 running 8+ hours non-stop. DeepSeek-Reasonix at 35k stars saying 'leave it running.' The local-model economics make unattended runs viable — expgauge is the safety layer for that paradigm.",
+        "zh": "Qwen3.8 连续 8 小时不停。DeepSeek-Reasonix 35k 星标榜'leave it running'。本地模型的经济性让无人值守运行成为可能——expgauge 就是这个模式的安全层。"
+      }
+    }
+  ],
+  "demo": {
+    "title": {
+      "en": "See it in action",
+      "zh": "看看它怎么工作"
+    },
+    "note": {
+      "en": "expgauge watches your agent process, renders a live TUI badge, and pauses at thresholds.",
+      "zh": "expgauge 监控你的 agent 进程，渲染实时 TUI 徽章，在阈值触发时暂停。"
+    },
+    "source": "https://github.com/SuperMarioYL/expgauge",
+    "steps": [
+      {
+        "label": "Start watching",
+        "body": "Attach expgauge to your agent process",
+        "command": "expgauge watch --pid 12345",
+        "output": "expgauge v0.1.0  watching PID 12345\nthresholds: 2h0m0s / 50 mutations / 1000000 tokens\n\n┌─ exposure badge ───────────────┐\n│ wall-clock  0h 12m 34s  ██████░ │\n│ mutations   8             ███░  │\n│ tokens      234K          ██░   │\n│ status      OK                  │\n└────────────────────────────────┘"
+      },
+      {
+        "label": "Threshold hit",
+        "body": "Agent crosses the 2-hour threshold — forced pause",
+        "command": "expgauge status",
+        "output": "┌─ exposure badge ───────────────┐\n│ wall-clock  2h 03m 12s  ████████│\n│ mutations   47            ███████│\n│ tokens      2.3M          ███████│\n│ status      EXCEEDED — PAUSED  │\n└────────────────────────────────┘\n\n⚠  Threshold exceeded. Review the agent's actions.\n  Wall-clock: 2h 03m (limit: 2h 00m)\n  Continue? [y/N]"
+      }
+    ]
+  },
+  "quickstart": {
+    "title": "Get started",
+    "body": "Install and run expgauge in under a minute.",
+    "steps": [
+      {
+        "title": "Install",
+        "code": "go install github.com/SuperMarioYL/expgauge@latest"
+      },
+      {
+        "title": "Watch your agent",
+        "code": "expgauge watch --pid $(pgrep -f deepseek-reasonix)"
+      },
+      {
+        "title": "Check exposure",
+        "code": "expgauge status"
+      },
+      {
+        "title": "Export timeline",
+        "code": "expgauge export --output run.jsonl"
+      }
+    ]
+  },
+  "limitations": [
+    "expgauge estimates token burn by parsing agent logs; accuracy depends on log format.",
+    "Force-pause uses SIGTSTP (Unix only); no-op on Windows.",
+    "Filesystem mutation detection uses fsnotify; network-mounted paths may have event latency."
+  ],
+  "scene": {
+    "kind": "neon-graph",
+    "fallback": "/assets/scene-dark.svg",
+    "fallbackLight": "/assets/scene-light.svg"
+  },
+  "story": {
+    "intro": {
+      "title": {
+        "zh": "从'leave it running'开始",
+        "en": "It starts with 'leave it running'"
+      },
+      "body": {
+        "zh": "DeepSeek-Reasonix 有 35,000 星标，它说'leave it running'——让 agent 一直跑。Qwen3.8 让本地模型连续 8 小时工作成为现实。但是当 agent 无人看管地运行数小时，谁来喊停？",
+        "en": "DeepSeek-Reasonix has 35,000 stars and says 'leave it running.' Qwen3.8 makes 8-hour non-stop local agent work a reality. But when an agent runs unsupervised for hours, who calls a halt?"
+      }
+    },
+    "sections": [
+      {
+        "title": {
+          "zh": "暴露不是单次操作的风险",
+          "en": "Exposure isn't per-action risk"
+        },
+        "body": {
+          "zh": "传统 LLM 可观测性工具（LangSmith、Helicone）追踪单次请求的延迟和成本。但无人值守的暴露是时间性的——自上次人工审查以来过了多久，发生了多少状态变更。expgauge 引入了一个新的流原语：运行级暴露徽章。",
+          "en": "Traditional LLM observability tools (LangSmith, Helicone) track per-request latency and cost. But unsupervised exposure is temporal — how long since a human looked, how many state mutations occurred. expgauge introduces a new flow primitive: the run-level exposure badge."
+        }
+      },
+      {
+        "title": {
+          "zh": "从'I Have Been Clawed'到预防",
+          "en": "From 'I Have Been Clawed' to prevention"
+        },
+        "body": {
+          "zh": "社区建了 I Have Been Clawed——一个 coding agent 事故索引。但它是事后编目，不是事前预防。expgauge 在事故发生前就强制你回头看一眼。",
+          "en": "The community built I Have Been Clawed — an index of coding agent incidents. But it catalogs after damage, not before. expgauge forces you to look back before things go wrong."
+        }
+      }
+    ],
+    "details": [
+      {
+        "title": {
+          "zh": "配置阈值",
+          "en": "Configure thresholds"
+        },
+        "body": {
+          "zh": "默认阈值：2 小时运行时长 / 50 次状态变更 / 100 万 token 消耗。所有阈值都可在 ~/.expgauge.yaml 中按项目覆盖。",
+          "en": "Default thresholds: 2h wall-clock / 50 mutations / 1M tokens. All configurable via ~/.expgauge.yaml with per-project overrides."
+        },
+        "code": "# ~/.expgauge.yaml\nthresholds:\n  wall_clock_sec: 7200\n  mutations: 50\n  tokens: 1000000\nwatch_paths:\n  - ./src\n  - ./configs\nagent:\n  name_pattern: \"deepseek|qwen|reasonix\""
+      }
+    ]
+  },
+  "meta": {
+    "content_version": "1",
+    "source_version": "v0.1.0",
+    "visual_profile": "neon-particle",
+    "web_factory_ref": "03e7ec8a416f868b847d13b3023bf7d1215db767"
+  }
+}
