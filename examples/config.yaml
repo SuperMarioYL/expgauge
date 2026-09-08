@@ -1,0 +1,14 @@
+# expgauge config — tracks wall-clock, mutations, and token burn
+# Place at ~/.expgauge.yaml (or pass --config)
+watch_paths:
+  - /home/user/my-project
+
+thresholds:
+  wall_clock_sec: 7200   # 2 hours
+  mutations: 50           # 50 file mutations
+  tokens: 1000000         # 1M tokens
+
+agent:
+  pid_file: /tmp/coding-agent.pid
+  log_path: /tmp/coding-agent.log
+  name_pattern: "qwen|deepseek|glm"

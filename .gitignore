@@ -1,0 +1,29 @@
+# build scratch
+.build_metadata*
+.builder_*
+.spawn.*
+.stage_*
+PUBLISH_BLOCKED.md
+BUILD_SETUP_NEXT_STEPS.md
+
+# editor / agent scratch
+.claude/
+CLAUDE.md
+
+# go build artifacts
+/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+dist/
+
+# coverage
+coverage.txt
+
+# os files
+.DS_Store
+Thumbs.db
