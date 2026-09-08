@@ -64,13 +64,15 @@
         "label": "Start watching",
         "body": "Attach expgauge to your agent process",
         "command": "expgauge watch --pid 12345",
-        "output": "expgauge v0.1.0  watching PID 12345\nthresholds: 2h0m0s / 50 mutations / 1000000 tokens\n\n┌─ exposure badge ───────────────┐\n│ wall-clock  0h 12m 34s  ██████░ │\n│ mutations   8             ███░  │\n│ tokens      234K          ██░   │\n│ status      OK                  │\n└────────────────────────────────┘"
+        "output": "expgauge v0.1.0  watching PID 12345\nthresholds: 2h0m0s / 50 mutations / 1000000 tokens\n\n┌─ exposure badge ───────────────┐\n│ wall-clock  0h 12m 34s  ██████░ │\n│ mutations   8             ███░  │\n│ tokens      234K          ██░   │\n│ status      OK                  │\n└────────────────────────────────┘",
+        "image": "#"
       },
       {
         "label": "Threshold hit",
         "body": "Agent crosses the 2-hour threshold — forced pause",
         "command": "expgauge status",
-        "output": "┌─ exposure badge ───────────────┐\n│ wall-clock  2h 03m 12s  ████████│\n│ mutations   47            ███████│\n│ tokens      2.3M          ███████│\n│ status      EXCEEDED — PAUSED  │\n└────────────────────────────────┘\n\n⚠  Threshold exceeded. Review the agent's actions.\n  Wall-clock: 2h 03m (limit: 2h 00m)\n  Continue? [y/N]"
+        "output": "┌─ exposure badge ───────────────┐\n│ wall-clock  2h 03m 12s  ████████│\n│ mutations   47            ███████│\n│ tokens      2.3M          ███████│\n│ status      EXCEEDED — PAUSED  │\n└────────────────────────────────┘\n\n⚠  Threshold exceeded. Review the agent's actions.\n  Wall-clock: 2h 03m (limit: 2h 00m)\n  Continue? [y/N]",
+        "image": "#"
       }
     ]
   },
