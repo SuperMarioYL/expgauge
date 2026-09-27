@@ -40,24 +40,27 @@ type tickMsg time.Time
 
 // BadgeModel is the bubbletea model for the live exposure badge.
 type BadgeModel struct {
-	snapshot   SnapshotFunc
-	engine     *threshold.Engine
-	pid        int
-	status     threshold.Result
+	snapshot     SnapshotFunc
+	engine       *threshold.Engine
+	pid          int
+	status       threshold.Result
 	reviewPrompt bool
-	quitting   bool
-	lastExp    metrics.Exposure
-	onReview   func() // called when user approves continuing
+	quitting     bool
+	lastExp      metrics.Exposure
+	onReview     func() // called when user approves continuing
+	onPauseChange func(bool) // called when the threshold pause starts/ends
 }
 
 // NewBadge creates the badge model. onReview is called when the user
-// approves continuing past a threshold pause.
-func NewBadge(snap SnapshotFunc, eng *threshold.Engine, pid int, onReview func()) BadgeModel {
+// approves continuing past a threshold pause; onPauseChange is called
+// when the forced pause starts (true) and after an approved review (false).
+func NewBadge(snap SnapshotFunc, eng *threshold.Engine, pid int, onReview func(), onPauseChange func(bool)) BadgeModel {
 	return BadgeModel{
-		snapshot: snap,
-		engine:   eng,
-		pid:      pid,
-		onReview: onReview,
+		snapshot:      snap,
+		engine:        eng,
+		pid:           pid,
+		onReview:      onReview,
+		onPauseChange: onPauseChange,
 	}
 }
 
@@ -80,6 +83,9 @@ func (m BadgeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.onReview != nil {
 					m.onReview()
 				}
+				if m.onPauseChange != nil {
+					m.onPauseChange(false)
+				}
 				if m.pid > 0 {
 					_ = threshold.ForceResume(m.pid)
 				}
@@ -97,6 +103,9 @@ func (m BadgeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = m.engine.Evaluate(exp)
 		if m.status.Status == threshold.StatusExceeded && !m.reviewPrompt {
 			m.reviewPrompt = true
+			if m.onPauseChange != nil {
+				m.onPauseChange(true)
+			}
 			if m.pid > 0 {
 				_ = threshold.ForcePause(m.pid)
 			}

@@ -8,6 +8,7 @@ package metrics
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -38,14 +39,15 @@ type Snapshot struct {
 
 // RunState is the persisted run state written to ~/.expgauge/run.json.
 type RunState struct {
-	PID         int        `json:"pid"`
-	StartedAt   time.Time  `json:"started_at"`
-	LastReview  time.Time  `json:"last_review"`
-	Mutations   int        `json:"mutations"`
-	Tokens      int64      `json:"tokens"`
-	WatchPaths  []string   `json:"watch_paths"`
-	LogPath     string     `json:"log_path"`
-	Paused      bool       `json:"paused"`
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"started_at"`
+	LastReview  time.Time `json:"last_review"`
+	Mutations   int       `json:"mutations"`
+	Tokens      int64     `json:"tokens"`
+	Reviews     int       `json:"reviews"`
+	WatchPaths  []string  `json:"watch_paths"`
+	LogPath     string    `json:"log_path"`
+	Paused      bool      `json:"paused"`
 }
 
 // Accumulator tracks live exposure for a single agent run.
@@ -55,6 +57,8 @@ type Accumulator struct {
 	lastReview time.Time
 	mutations  int
 	tokens     int64
+	reviews    int
+	paused     bool
 	logPath    string
 	watcher    *fsnotify.Watcher
 	stopCh     chan struct{}
@@ -98,8 +102,14 @@ func (a *Accumulator) Start() error {
 	if a.logPath != "" {
 		f, err := os.Open(a.logPath)
 		if err == nil {
-			a.logFile = f
-			a.logReader = bufio.NewReader(f)
+			// Tail semantics: exposure measures the current run, so start at
+			// EOF and ignore token lines written by previous sessions.
+			if _, serr := f.Seek(0, io.SeekEnd); serr == nil {
+				a.logFile = f
+				a.logReader = bufio.NewReader(f)
+			} else {
+				f.Close()
+			}
 		}
 	}
 
@@ -110,6 +120,11 @@ func (a *Accumulator) Start() error {
 // watchLoop processes fsnotify events and reads the log file tail.
 func (a *Accumulator) watchLoop() {
 	defer close(a.doneCh)
+	// A ticker (not time.After) so tailLog keeps running while filesystem
+	// events stream in; time.After would reset on every event and starve
+	// token parsing exactly when the agent is most active.
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-a.stopCh:
@@ -119,7 +134,7 @@ func (a *Accumulator) watchLoop() {
 				return
 			}
 			a.handleEvent(event)
-		case <-time.After(5 * time.Second):
+		case <-ticker.C:
 			a.tailLog()
 		}
 	}
@@ -221,10 +236,49 @@ func (a *Accumulator) Snapshot() Exposure {
 	}
 }
 
-// Review marks a human review checkpoint, resetting the wall-clock timer.
+// Review marks a human review checkpoint. Exposure is measured as the
+// unsupervised window since the last review, so all three dimensions
+// restart: the wall-clock timer resets and accumulated mutations/tokens
+// are cleared.
 func (a *Accumulator) Review() {
+	a.ReviewAt(time.Now())
+}
+
+// ReviewAt marks a review checkpoint at the given time, resetting the
+// exposure window and counting the review.
+func (a *Accumulator) ReviewAt(t time.Time) {
 	a.mu.Lock()
-	a.lastReview = time.Now()
+	a.lastReview = t
+	a.mutations = 0
+	a.tokens = 0
+	a.reviews++
+	a.mu.Unlock()
+}
+
+// AdoptDiskState merges a run state persisted by a sibling command
+// (e.g. `expgauge review` running while `watch` holds the live gauge):
+// a newer last_review restarts the exposure window, and a higher review
+// count is carried over so the saver does not clobber it.
+func (a *Accumulator) AdoptDiskState(rs RunState) {
+	a.mu.Lock()
+	if rs.LastReview.After(a.lastReview) {
+		a.lastReview = rs.LastReview
+		a.mutations = 0
+		a.tokens = 0
+	}
+	if rs.Reviews > a.reviews {
+		a.reviews = rs.Reviews
+	}
+	if !rs.Paused {
+		a.paused = false
+	}
+	a.mu.Unlock()
+}
+
+// SetPaused records whether a threshold pause is currently active.
+func (a *Accumulator) SetPaused(paused bool) {
+	a.mu.Lock()
+	a.paused = paused
 	a.mu.Unlock()
 }
 
@@ -238,8 +292,10 @@ func (a *Accumulator) ToRunState(pid int, watchPaths []string) RunState {
 		LastReview: a.lastReview,
 		Mutations:  a.mutations,
 		Tokens:     a.tokens,
+		Reviews:    a.reviews,
 		WatchPaths: watchPaths,
 		LogPath:    a.logPath,
+		Paused:     a.paused,
 	}
 }
 

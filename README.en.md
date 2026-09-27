@@ -9,7 +9,7 @@
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7D3CFF?style=flat-square" alt="License" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/github/stars/SuperMarioYL/expgauge?style=flat-square&color=7D3CFF&logo=github" alt="Stars" /></a>
-<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.1.0-7D3CFF?style=flat-square" alt="Version" /></a>
+<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.2.0-7D3CFF?style=flat-square" alt="Version" /></a>
 <a href="https://gitee.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Gitee-mirror-C71D23?style=flat-square&logo=gitee&logoColor=white" alt="Gitee" /></a>
 
 <br/>

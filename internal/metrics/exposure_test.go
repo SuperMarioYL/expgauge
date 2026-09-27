@@ -1,8 +1,14 @@
 package metrics
 
 import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 func TestExposureFromRunState(t *testing.T) {
@@ -114,5 +120,123 @@ func TestIsTempFile(t *testing.T) {
 		if got := isTempFile(tt.name); got != tt.want {
 			t.Errorf("isTempFile(%q) = %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestReviewAt_ResetsExposureWindow(t *testing.T) {
+	acc, err := NewAccumulator(nil, "")
+	if err != nil {
+		t.Fatalf("NewAccumulator: %v", err)
+	}
+	if err := acc.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer acc.Stop()
+
+	// Seed mutations via a write event and tokens via a crafted log reader.
+	acc.handleEvent(fsnotify.Event{Name: "/proj/main.go", Op: fsnotify.Write})
+	acc.mu.Lock()
+	acc.logReader = bufio.NewReader(strings.NewReader("total_tokens: 250000\n"))
+	acc.mu.Unlock()
+	acc.tailLog()
+
+	exp := acc.Snapshot()
+	if exp.Mutations != 1 {
+		t.Fatalf("mutations = %d, want 1 (seed)", exp.Mutations)
+	}
+	if exp.Tokens != 250000 {
+		t.Fatalf("tokens = %d, want 250000 (seed)", exp.Tokens)
+	}
+
+	acc.ReviewAt(time.Now().Add(time.Second))
+	exp = acc.Snapshot()
+	if exp.Mutations != 0 {
+		t.Errorf("mutations after review = %d, want 0", exp.Mutations)
+	}
+	if exp.Tokens != 0 {
+		t.Errorf("tokens after review = %d, want 0", exp.Tokens)
+	}
+	if exp.WallClockSec < 0 {
+		t.Errorf("wall_clock after review = %d, want >= 0", exp.WallClockSec)
+	}
+	rs := acc.ToRunState(0, nil)
+	if rs.Reviews != 1 {
+		t.Errorf("reviews = %d, want 1", rs.Reviews)
+	}
+}
+
+func TestAdoptDiskState_NewerReviewRestartsWindow(t *testing.T) {
+	acc, err := NewAccumulator(nil, "")
+	if err != nil {
+		t.Fatalf("NewAccumulator: %v", err)
+	}
+	acc.handleEvent(fsnotify.Event{Name: "/proj/main.go", Op: fsnotify.Write})
+
+	future := time.Now().Add(time.Minute)
+	acc.AdoptDiskState(RunState{LastReview: future, Reviews: 3, Mutations: 99, Tokens: 999})
+
+	exp := acc.Snapshot()
+	if exp.Mutations != 0 {
+		t.Errorf("mutations after adopt = %d, want 0 (window restarted)", exp.Mutations)
+	}
+	if exp.Tokens != 0 {
+		t.Errorf("tokens after adopt = %d, want 0 (window restarted)", exp.Tokens)
+	}
+	rs := acc.ToRunState(0, nil)
+	if rs.Reviews != 3 {
+		t.Errorf("reviews after adopt = %d, want 3 (carried from disk)", rs.Reviews)
+	}
+	if !rs.LastReview.Equal(future) {
+		t.Errorf("last_review after adopt = %v, want %v", rs.LastReview, future)
+	}
+}
+
+func TestAdoptDiskState_StaleDiskStateIgnored(t *testing.T) {
+	acc, err := NewAccumulator(nil, "")
+	if err != nil {
+		t.Fatalf("NewAccumulator: %v", err)
+	}
+	before := acc.Snapshot()
+	acc.AdoptDiskState(RunState{LastReview: time.Now().Add(-time.Hour), Reviews: 0, Mutations: 5})
+	after := acc.Snapshot()
+	if after.Mutations != before.Mutations {
+		t.Errorf("mutations changed from %d to %d on stale adopt, want unchanged", before.Mutations, after.Mutations)
+	}
+}
+
+func TestStart_LogTailBeginsAtEOF(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "agent.log")
+	if err := os.WriteFile(logPath, []byte("tokens: 1000000\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	acc, err := NewAccumulator(nil, logPath)
+	if err != nil {
+		t.Fatalf("NewAccumulator: %v", err)
+	}
+	if err := acc.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer acc.Stop()
+
+	// Historical content written before Start must not count.
+	acc.tailLog()
+	if exp := acc.Snapshot(); exp.Tokens != 0 {
+		t.Fatalf("tokens = %d after tailing pre-existing log, want 0", exp.Tokens)
+	}
+
+	// Lines appended after Start must count.
+	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("total_tokens: 7000\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	acc.tailLog()
+	if exp := acc.Snapshot(); exp.Tokens != 7000 {
+		t.Errorf("tokens = %d after appending a line, want 7000", exp.Tokens)
 	}
 }

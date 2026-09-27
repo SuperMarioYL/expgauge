@@ -23,28 +23,38 @@ import (
 )
 
 const (
-	stateFileName     = "run.json"
-	timelineFileName  = "timeline.jsonl"
-	snapshotInterval  = time.Minute
+	stateFileName    = "run.json"
+	timelineFileName = "timeline.jsonl"
+	snapshotInterval = time.Minute
 )
 
+// version is the single source for `expgauge --version`; a test asserts it
+// matches the VERSION file at the repo root.
+var version = "v0.2.0"
+
 var (
-	watchPID    int
-	watchPaths  []string
-	watchLog    string
-	exportOut   string
+	watchPID  int
+	watchPaths []string
+	watchLog  string
+	exportOut string
 )
 
 func main() {
-	rootCmd := &cobra.Command{
-		Use:   "expgauge",
-		Short: "Run-level exposure gauge for coding agents",
-		Long:  "expgauge tracks cumulative unsupervised exposure of coding agents on local models — wall-clock time, state mutations, and token burn since the last human review — and forces a pause at configurable thresholds.",
-	}
-	rootCmd.AddCommand(newWatchCmd(), newStatusCmd(), newReviewCmd(), newExportCmd())
-	if err := rootCmd.Execute(); err != nil {
+	if err := newRootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
+}
+
+func newRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:     "expgauge",
+		Short:   "Run-level exposure gauge for coding agents",
+		Long:    "expgauge tracks cumulative unsupervised exposure of coding agents on local models — wall-clock time, state mutations, and token burn since the last human review — and forces a pause at configurable thresholds.",
+		Version: version,
+	}
+	rootCmd.SetVersionTemplate("expgauge {{.Version}}\n")
+	rootCmd.AddCommand(newWatchCmd(), newStatusCmd(), newReviewCmd(), newExportCmd())
+	return rootCmd
 }
 
 func newWatchCmd() *cobra.Command {
@@ -138,11 +148,16 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	})
 
 	onReview := func() {
-		acc.Review()
+		acc.ReviewAt(time.Now())
 		_ = saveState(acc.ToRunState(pid, cfg.WatchPaths))
 	}
 
-	badge := ui.NewBadge(acc.Snapshot, eng, pid, onReview)
+	onPauseChange := func(paused bool) {
+		acc.SetPaused(paused)
+		_ = saveState(acc.ToRunState(pid, cfg.WatchPaths))
+	}
+
+	badge := ui.NewBadge(acc.Snapshot, eng, pid, onReview, onPauseChange)
 	if err := ui.Run(badge); err != nil {
 		return fmt.Errorf("run badge: %w", err)
 	}
@@ -153,6 +168,9 @@ func runWatch(cmd *cobra.Command, args []string) error {
 }
 
 // stateSaver periodically writes run state and appends timeline snapshots.
+// Before each write it adopts a sibling command's persisted review (e.g.
+// `expgauge review` run in another terminal) so the live gauge and the
+// state file agree instead of the saver clobbering the review.
 func stateSaver(ctx context.Context, acc *metrics.Accumulator, pid int, paths []string) {
 	ticker := time.NewTicker(snapshotInterval)
 	defer ticker.Stop()
@@ -162,6 +180,9 @@ func stateSaver(ctx context.Context, acc *metrics.Accumulator, pid int, paths []
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if rs, err := loadState(); err == nil {
+				acc.AdoptDiskState(*rs)
+			}
 			exp := acc.Snapshot()
 			_ = saveState(acc.ToRunState(pid, paths))
 			_ = export.AppendSnapshot(tlPath, metrics.Snapshot{
@@ -174,28 +195,43 @@ func stateSaver(ctx context.Context, acc *metrics.Accumulator, pid int, paths []
 	}
 }
 
-// runStatus prints the current run's cumulative exposure.
+// runStatus prints the current run's cumulative exposure plus how much of
+// each configured threshold it consumes — the run-level autonomy summary.
 func runStatus(cmd *cobra.Command, args []string) error {
 	rs, err := loadState()
 	if err != nil {
 		return fmt.Errorf("no active run found (run 'expgauge watch' first): %w", err)
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		def := config.Default()
+		cfg = &def
+	}
 	exp := metrics.ExposureFromRunState(*rs)
+	res := threshold.New(threshold.Thresholds{
+		WallClockSec: cfg.Thresholds.WallClockSec,
+		Mutations:    cfg.Thresholds.Mutations,
+		Tokens:       cfg.Thresholds.Tokens,
+	}).Evaluate(exp)
 
 	fmt.Printf("expgauge status\n")
 	fmt.Printf("  pid:         %d\n", rs.PID)
 	fmt.Printf("  started:     %s\n", rs.StartedAt.Format(time.RFC3339))
 	fmt.Printf("  last review: %s\n", rs.LastReview.Format(time.RFC3339))
-	fmt.Printf("  wall-clock:  %s\n", fmtDuration(exp.WallClockSec))
-	fmt.Printf("  mutations:   %d\n", exp.Mutations)
-	fmt.Printf("  tokens:      %s\n", fmtTokens(exp.Tokens))
+	fmt.Printf("  wall-clock:  %s  (%.0f%% of %s)\n",
+		fmtDuration(exp.WallClockSec), res.WallClockPct*100, fmtDuration(cfg.Thresholds.WallClockSec))
+	fmt.Printf("  mutations:   %d  (%.0f%% of %d)\n",
+		exp.Mutations, res.MutationsPct*100, cfg.Thresholds.Mutations)
+	fmt.Printf("  tokens:      %s  (%.0f%% of %s)\n",
+		fmtTokens(exp.Tokens), res.TokensPct*100, fmtTokens(cfg.Thresholds.Tokens))
+	fmt.Printf("  reviews:     %d\n", rs.Reviews)
 	if rs.Paused {
 		fmt.Printf("  state:       PAUSED (awaiting review)\n")
 	}
 	return nil
 }
 
-// runReview marks a human review checkpoint, resetting the wall-clock timer.
+// runReview marks a human review checkpoint, restarting the exposure window.
 func runReview(cmd *cobra.Command, args []string) error {
 	rs, err := loadState()
 	if err != nil {
@@ -203,10 +239,16 @@ func runReview(cmd *cobra.Command, args []string) error {
 	}
 	rs.LastReview = time.Now()
 	rs.Paused = false
+	rs.Reviews++
+	// The exposure window restarts at a review; drop the previous window's
+	// counters so status does not pair a fresh timer with stale mutations/tokens.
+	// A live watch adopts the newer review and accumulates from zero.
+	rs.Mutations = 0
+	rs.Tokens = 0
 	if err := saveState(*rs); err != nil {
 		return fmt.Errorf("save state: %w", err)
 	}
-	fmt.Println("review checkpoint recorded — wall-clock timer reset")
+	fmt.Println("review checkpoint recorded — exposure window reset")
 	return nil
 }
 
