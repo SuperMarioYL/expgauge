@@ -9,7 +9,7 @@
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7D3CFF?style=flat-square" alt="License" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/github/stars/SuperMarioYL/expgauge?style=flat-square&color=7D3CFF&logo=github" alt="Stars" /></a>
-<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.2.0-7D3CFF?style=flat-square" alt="Version" /></a>
+<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.3.0-7D3CFF?style=flat-square" alt="Version" /></a>
 <a href="https://gitee.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Gitee-mirror-C71D23?style=flat-square&logo=gitee&logoColor=white" alt="Gitee" /></a>
 
 <br/>
@@ -85,7 +85,7 @@ expgauge watch --pid $(pgrep -f coding-agent) --log /tmp/agent.log --paths ./src
 # Check current run status
 expgauge status
 
-# Mark a human review checkpoint (resets wall-clock timer)
+# Mark a human review checkpoint (resets all three exposure counters)
 expgauge review
 
 # Export the run timeline as JSONL
@@ -102,7 +102,7 @@ Works with zero config — built-in default thresholds (2h / 50 mutations / 1M t
 |---------|-------------|
 | `expgauge watch` | Start monitoring and show a live exposure badge; pauses at thresholds |
 | `expgauge status` | Show the current run's cumulative exposure |
-| `expgauge review` | Mark a human review checkpoint, resetting the wall-clock timer |
+| `expgauge review` | Mark a human review checkpoint, resetting all three exposure counters (wall-clock / mutations / tokens) |
 | `expgauge export -o file.jsonl` | Export the run timeline as JSONL |
 
 `watch` command flags:
@@ -145,7 +145,7 @@ The agent has crossed an exposure threshold:
   Review the agent's work. Continue? [y/n]
 ```
 
-Press `y` to continue (resets wall-clock), `n` to stop monitoring.
+Press `y` to continue (resets all three exposure counters), `n` to stop monitoring.
 
 ---
 
@@ -169,7 +169,7 @@ agent:
   name_pattern: "qwen|deepseek|glm" # Search by process name with pgrep -f
 ```
 
-`expgauge watch` locates the agent process in this order: `--pid` flag > `agent.pid_file` > `agent.name_pattern`. If none is configured, only filesystem mutations are tracked (no token tracking).
+`expgauge watch` locates the agent process in this order: `--pid` flag > `agent.pid_file` > `agent.name_pattern`. If none is configured, only filesystem mutations are tracked (no token tracking). A configured directory or log that cannot be opened, or a `--pid` that is no longer running, makes `watch` exit with an error instead of silently counting zero.
 
 ---
 
@@ -193,7 +193,7 @@ Data flow:
 2. Accumulator polls filesystem events and log tail in background, updating wall-clock / mutations / tokens
 3. TUI badge refreshes every second, evaluating thresholds
 4. Threshold crossed → SIGTSTP sent to agent process + review prompt displayed
-5. Run state persisted to `~/.expgauge/run.json` every minute, snapshots appended to `~/.expgauge/timeline.jsonl`
+5. Run state persisted to `~/.expgauge/run.json` every minute, snapshots appended to `~/.expgauge/timeline.jsonl` (each `watch` run starts a fresh timeline)
 6. `status` / `review` / `export` read and write state and timeline files
 
 ---
@@ -203,8 +203,9 @@ Data flow:
 | Version | Goal | Status |
 |---------|------|--------|
 | v0.1 | Core: CLI watch + status + threshold pause + JSONL export | ✅ Implemented |
-| v0.2 | Enhanced config, per-project thresholds, web dashboard | Planned |
-| v0.3 | Multi-agent orchestration, cloud-hosted metrics | Planned |
+| v0.2 | Review lifecycle, per-run token tail, autonomy summary in status, `--version` | ✅ Implemented |
+| v0.3 | Attach validation (paths / log / PID), log-rotation tail, per-run timeline, version-surface lockstep | ✅ Implemented |
+| Later | Multi-agent orchestration, cloud-hosted metrics, web dashboard | Planned |
 
 ---
 

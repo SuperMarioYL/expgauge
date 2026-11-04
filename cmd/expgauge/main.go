@@ -29,14 +29,15 @@ const (
 )
 
 // version is the single source for `expgauge --version`; a test asserts it
-// matches the VERSION file at the repo root.
-var version = "v0.2.0"
+// matches the VERSION file at the repo root. Both hold bare semver — git tags
+// carry the v prefix.
+var version = "0.3.0"
 
 var (
-	watchPID  int
+	watchPID   int
 	watchPaths []string
-	watchLog  string
-	exportOut string
+	watchLog   string
+	exportOut  string
 )
 
 func main() {
@@ -80,7 +81,7 @@ func newStatusCmd() *cobra.Command {
 func newReviewCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "review",
-		Short: "Mark a review checkpoint (resets wall-clock)",
+		Short: "Mark a review checkpoint (resets all exposure counters)",
 		RunE:  runReview,
 	}
 }
@@ -108,14 +109,22 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		cfg.Agent.LogPath = watchLog
 	}
 
-	// Locate the agent process. This is best-effort: if no PID is found,
-	// we still track filesystem mutations and show the badge.
+	// Locate the agent process. Discovery is best-effort: if no PID is found we
+	// still track filesystem mutations and show the badge. An explicit --pid is
+	// a promise to pause that process, so a dead one is an error instead of a
+	// gauge that reports a pause it cannot deliver.
 	pid := watchPID
-	if pid == 0 {
-		proc, perr := watcher.FindProcess(cfg.Agent.PidFile, cfg.Agent.NamePattern, 0)
-		if perr == nil {
-			pid = proc.PID
+	if pid != 0 {
+		if pid < 0 {
+			return fmt.Errorf("--pid %d: must be a positive process id", pid)
 		}
+		proc, perr := watcher.FindProcess("", "", pid)
+		if perr != nil {
+			return fmt.Errorf("--pid %d: %w", pid, perr)
+		}
+		pid = proc.PID
+	} else if proc, perr := watcher.FindProcess(cfg.Agent.PidFile, cfg.Agent.NamePattern, 0); perr == nil {
+		pid = proc.PID
 	}
 
 	if len(cfg.WatchPaths) == 0 {
@@ -128,9 +137,19 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create accumulator: %w", err)
 	}
 	if err := acc.Start(); err != nil {
-		return err
+		return fmt.Errorf("start accumulator: %w", err)
 	}
 	defer acc.Stop()
+
+	// A run owns its timeline: start a fresh one so `export` cannot mix a
+	// previous run's snapshots (and their wall-clock) into this run's.
+	tlPath, err := timelinePath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(tlPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("reset timeline: %w", err)
+	}
 
 	// Persist initial state so status/review/export work during the run.
 	rs := acc.ToRunState(pid, cfg.WatchPaths)

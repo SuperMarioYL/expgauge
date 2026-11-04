@@ -64,7 +64,7 @@
         "label": "Start watching",
         "body": "Attach expgauge to your agent process",
         "command": "expgauge watch --pid 12345",
-        "output": "expgauge v0.2.0  watching PID 12345\nthresholds: 2h0m0s / 50 mutations / 1000000 tokens\n\n┌─ exposure badge ───────────────┐\n│ wall-clock  0h 12m 34s  ██████░ │\n│ mutations   8             ███░  │\n│ tokens      234K          ██░   │\n│ status      OK                  │\n└────────────────────────────────┘",
+        "output": "expgauge v0.3.0  watching PID 12345\nthresholds: 2h0m0s / 50 mutations / 1000000 tokens\n\n┌─ exposure badge ───────────────┐\n│ wall-clock  0h 12m 34s  ██████░ │\n│ mutations   8             ███░  │\n│ tokens      234K          ██░   │\n│ status      OK                  │\n└────────────────────────────────┘",
         "image": "/assets/demo-start.svg"
       },
       {
@@ -173,7 +173,7 @@
   },
   "meta": {
     "content_version": "2",
-    "source_version": "v0.2.0",
+    "source_version": "v0.3.0",
     "visual_profile": "neon-particle",
     "web_factory_ref": "03e7ec8a416f868b847d13b3023bf7d1215db767"
   }

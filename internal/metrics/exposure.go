@@ -31,7 +31,7 @@ type Exposure struct {
 
 // Snapshot is a timestamped exposure reading, used for JSONL export.
 type Snapshot struct {
-	Timestamp   time.Time `json:"ts"`
+	Timestamp    time.Time `json:"ts"`
 	WallClockSec int64     `json:"wall_clock_sec"`
 	Mutations    int       `json:"mutations"`
 	Tokens       int64     `json:"tokens"`
@@ -39,21 +39,21 @@ type Snapshot struct {
 
 // RunState is the persisted run state written to ~/.expgauge/run.json.
 type RunState struct {
-	PID         int       `json:"pid"`
-	StartedAt   time.Time `json:"started_at"`
-	LastReview  time.Time `json:"last_review"`
-	Mutations   int       `json:"mutations"`
-	Tokens      int64     `json:"tokens"`
-	Reviews     int       `json:"reviews"`
-	WatchPaths  []string  `json:"watch_paths"`
-	LogPath     string    `json:"log_path"`
-	Paused      bool      `json:"paused"`
+	PID        int       `json:"pid"`
+	StartedAt  time.Time `json:"started_at"`
+	LastReview time.Time `json:"last_review"`
+	Mutations  int       `json:"mutations"`
+	Tokens     int64     `json:"tokens"`
+	Reviews    int       `json:"reviews"`
+	WatchPaths []string  `json:"watch_paths"`
+	LogPath    string    `json:"log_path"`
+	Paused     bool      `json:"paused"`
 }
 
 // Accumulator tracks live exposure for a single agent run.
 type Accumulator struct {
-	mu        sync.Mutex
-	startedAt time.Time
+	mu         sync.Mutex
+	startedAt  time.Time
 	lastReview time.Time
 	mutations  int
 	tokens     int64
@@ -69,6 +69,10 @@ type Accumulator struct {
 
 // NewAccumulator creates an accumulator that watches the given paths for
 // file mutations and parses the given log file for token usage.
+//
+// A path that cannot be watched is an error, not a silent skip: an unwatched
+// directory reports zero mutations while the agent keeps mutating it, which is
+// worse than refusing to start.
 func NewAccumulator(watchPaths []string, logPath string) (*Accumulator, error) {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -79,15 +83,15 @@ func NewAccumulator(watchPaths []string, logPath string) (*Accumulator, error) {
 			continue
 		}
 		if err := w.Add(p); err != nil {
-			// Non-fatal: path may not exist yet.
-			continue
+			w.Close()
+			return nil, fmt.Errorf("watch path %s: %w", p, err)
 		}
 	}
 	return &Accumulator{
-		watcher:   w,
-		logPath:   logPath,
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
+		watcher: w,
+		logPath: logPath,
+		stopCh:  make(chan struct{}),
+		doneCh:  make(chan struct{}),
 	}, nil
 }
 
@@ -101,16 +105,19 @@ func (a *Accumulator) Start() error {
 
 	if a.logPath != "" {
 		f, err := os.Open(a.logPath)
-		if err == nil {
-			// Tail semantics: exposure measures the current run, so start at
-			// EOF and ignore token lines written by previous sessions.
-			if _, serr := f.Seek(0, io.SeekEnd); serr == nil {
-				a.logFile = f
-				a.logReader = bufio.NewReader(f)
-			} else {
-				f.Close()
-			}
+		if err != nil {
+			a.watcher.Close()
+			return fmt.Errorf("open agent log %s: %w", a.logPath, err)
 		}
+		// Tail semantics: exposure measures the current run, so start at EOF and
+		// ignore token lines written by previous sessions.
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
+			f.Close()
+			a.watcher.Close()
+			return fmt.Errorf("seek agent log %s: %w", a.logPath, err)
+		}
+		a.logFile = f
+		a.logReader = bufio.NewReader(f)
 	}
 
 	go a.watchLoop()
@@ -183,11 +190,12 @@ var tokenPatterns = []*regexp.Regexp{
 }
 
 func (a *Accumulator) tailLog() {
-	if a.logReader == nil {
+	reader := a.logTailReader()
+	if reader == nil {
 		return
 	}
 	for {
-		line, err := a.logReader.ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if line != "" {
 			for _, re := range tokenPatterns {
 				m := re.FindStringSubmatch(line)
@@ -205,6 +213,49 @@ func (a *Accumulator) tailLog() {
 			return
 		}
 	}
+}
+
+// logTailReader returns the reader positioned to continue the token tail,
+// re-attaching it first if the agent truncated the log in place or a
+// logrotate-style rotation replaced it. Without this the descriptor Start
+// opened sits past EOF after a rotation and token burn silently stops being
+// counted for the rest of the run.
+func (a *Accumulator) logTailReader() *bufio.Reader {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.logReader == nil {
+		return nil
+	}
+	onDisk, err := os.Stat(a.logPath)
+	if err != nil {
+		return a.logReader // log briefly absent; keep the current descriptor
+	}
+	held, err := a.logFile.Stat()
+	if err != nil {
+		return a.logReader
+	}
+	if os.SameFile(onDisk, held) {
+		pos, err := a.logFile.Seek(0, io.SeekCurrent)
+		if err != nil || onDisk.Size() >= pos {
+			return a.logReader
+		}
+		// Truncated in place: the descriptor points past the new EOF, so read
+		// the replacement content from the start.
+		if _, err := a.logFile.Seek(0, io.SeekStart); err != nil {
+			return a.logReader
+		}
+		a.logReader.Reset(a.logFile)
+		return a.logReader
+	}
+	// Replaced by a new file: follow the path to it.
+	f, err := os.Open(a.logPath)
+	if err != nil {
+		return a.logReader
+	}
+	a.logFile.Close()
+	a.logFile = f
+	a.logReader = bufio.NewReader(f)
+	return a.logReader
 }
 
 // Stop halts the accumulator and releases resources.

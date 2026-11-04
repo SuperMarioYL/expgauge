@@ -9,7 +9,7 @@
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-7D3CFF?style=flat-square" alt="License" /></a>
 <a href="https://github.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/github/stars/SuperMarioYL/expgauge?style=flat-square&color=7D3CFF&logo=github" alt="Stars" /></a>
-<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.2.0-7D3CFF?style=flat-square" alt="Version" /></a>
+<a href="https://github.com/SuperMarioYL/expgauge/releases"><img src="https://img.shields.io/badge/version-0.3.0-7D3CFF?style=flat-square" alt="Version" /></a>
 <a href="https://gitee.com/SuperMarioYL/expgauge"><img src="https://img.shields.io/badge/Gitee-mirror-C71D23?style=flat-square&logo=gitee&logoColor=white" alt="Gitee" /></a>
 
 <br/>
@@ -85,7 +85,7 @@ expgauge watch --pid $(pgrep -f coding-agent) --log /tmp/agent.log --paths ./src
 # 查看当前运行状态
 expgauge status
 
-# 标记一次人工审查，重置 wall-clock 计时
+# 标记一次人工审查，重置全部三项暴露计数
 expgauge review
 
 # 导出运行时间线为 JSONL
@@ -102,7 +102,7 @@ expgauge export -o timeline.jsonl
 |------|------|
 | `expgauge watch` | 启动监控，在终端显示实时暴露徽章；越过阈值时暂停 |
 | `expgauge status` | 显示当前运行的累计暴露量 |
-| `expgauge review` | 标记人工审查检查点，重置 wall-clock 计时 |
+| `expgauge review` | 标记人工审查检查点，重置全部三项暴露计数（运行时长 / 变更 / token） |
 | `expgauge export -o file.jsonl` | 将运行时间线导出为 JSONL 格式 |
 
 `watch` 命令支持的 flag：
@@ -145,7 +145,7 @@ The agent has crossed an exposure threshold:
   Review the agent's work. Continue? [y/n]
 ```
 
-输入 `y` 继续（重置 wall-clock），输入 `n` 退出监控。
+输入 `y` 继续（重置全部三项暴露计数），输入 `n` 退出监控。
 
 ---
 
@@ -169,7 +169,7 @@ agent:
   name_pattern: "qwen|deepseek|glm" # 用 pgrep -f 按进程名搜索
 ```
 
-`expgauge watch` 会按以下顺序定位 agent 进程：`--pid` flag > `agent.pid_file` > `agent.name_pattern`。如果都未配置，仅追踪文件变更（不追踪 token）。
+`expgauge watch` 会按以下顺序定位 agent 进程：`--pid` flag > `agent.pid_file` > `agent.name_pattern`。如果都未配置，仅追踪文件变更（不追踪 token）。配置里指定了却打不开的目录或日志、以及已经退出的 `--pid`，`watch` 会直接报错退出，而不是静默按 0 计数。
 
 ---
 
@@ -193,7 +193,7 @@ expgauge
 2. 累加器在后台轮询文件事件和日志尾部，更新 wall-clock / 变更数 / token 数
 3. 每秒刷新 TUI 徽章，同时评估阈值
 4. 阈值越过 → 发送 SIGTSTP 给 agent 进程 + 弹出审查提示
-5. 每分钟持久化运行状态到 `~/.expgauge/run.json`，追加快照到 `~/.expgauge/timeline.jsonl`
+5. 每分钟持久化运行状态到 `~/.expgauge/run.json`，追加快照到 `~/.expgauge/timeline.jsonl`（每次 `watch` 开始一条新的时间线）
 6. `status` / `review` / `export` 读写状态文件和时间线文件
 
 ---
@@ -203,8 +203,9 @@ expgauge
 | 版本 | 目标 | 状态 |
 |------|------|------|
 | v0.1 | 核心：CLI watch + status + 阈值暂停 + JSONL 导出 | ✅ 已实现 |
-| v0.2 | 配置文件增强、项目级阈值、Web 仪表盘 | 计划中 |
-| v0.3 | 多 agent 编排、云端指标托管 | 计划中 |
+| v0.2 | 审查生命周期、按运行统计的 token 尾随、status 自主性摘要、`--version` | ✅ 已实现 |
+| v0.3 | 接入校验（目录 / 日志 / PID）、日志轮转跟随、按运行的时间线、版本面锁步 | ✅ 已实现 |
+| 后续 | 多 agent 编排、云端指标托管、Web 仪表盘 | 计划中 |
 
 ---
 
